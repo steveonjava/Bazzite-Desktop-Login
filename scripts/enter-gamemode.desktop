@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Enter Gaming Mode
+Exec=sudo -n systemctl start enter-gamemode.service
+Icon=steamdeck-gaming-return
+Terminal=false
+Type=Application
+StartupNotify=false
+Categories=System;
+Comment=Autologin to Gamemode; login to return

@@ -1,0 +1,6 @@
+[Unit]
+Description=Enter Gaming Mode
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/enter-gamemode.sh
