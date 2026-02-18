@@ -6,17 +6,12 @@ BASE_IMAGE_NAME=$(jq -r '."base-image-name"' < $IMAGE_INFO)
 USER=$(id -nu 1000)
 HOME=$(getent passwd $USER | cut -d: -f6)
 
+
 # SteamOS autologin SDDM config
 AUTOLOGIN_CONF='/etc/sddm.conf.d/zz-steamos-autologin.conf'
-DEFAULT_SESSION_OVERRIDE_CONF='/etc/sddm.conf.d/yy-default-session-override.conf'
 
-# Ensure default-session override exists (disables autologin by default)
-if [[ ! -f "$DEFAULT_SESSION_OVERRIDE_CONF" ]]; then
-  {
-    echo "[Autologin]"
-    echo "User="
-  } > "$DEFAULT_SESSION_OVERRIDE_CONF"
-fi
+# Ensure Bazzite Desktop Login SDDM config exists (disables autologin by default)
+"$(dirname "$0")/ensure-bazzite-desktop-login.sh"
 
 # Configure autologin if Steam has been updated
 if [[ -f $HOME/.local/share/Steam/ubuntu12_32/steamui.so ]]; then

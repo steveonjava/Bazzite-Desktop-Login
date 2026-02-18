@@ -14,6 +14,7 @@ echo "🧹 Uninstalling Bazzite Desktop Login..."
 
 # Paths installed by installer
 BIN_SCRIPT="/usr/local/bin/enter-gamemode.sh"
+ENSURE_SCRIPT="/usr/local/bin/ensure-bazzite-desktop-login.sh"
 SYSTEMD_UNIT="/etc/systemd/system/enter-gamemode.service"
 SUDOERS_FILE="/etc/sudoers.d/enter-gamemode"
 WAYLAND_LINK="/usr/local/share/wayland-sessions/00-plasma.desktop"
@@ -33,6 +34,11 @@ echo "🧽 Removing installed files..."
 
 if [[ -f "$BIN_SCRIPT" ]]; then
   sudo rm -f "$BIN_SCRIPT"
+fi
+
+# Remove ensure-bazzite-desktop-login.sh if present
+if [[ -f "$ENSURE_SCRIPT" ]]; then
+  sudo rm -f "$ENSURE_SCRIPT"
 fi
 
 if [[ -L "$WAYLAND_LINK" || -f "$WAYLAND_LINK" ]]; then

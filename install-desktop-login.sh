@@ -27,40 +27,6 @@ if [[ "$BASE_IMAGE_NAME" == "silverblue" ]]; then
 elif [[ "$BASE_IMAGE_NAME" == "kinoite" ]]; then
     echo "✅ KDE variant detected, proceeding."
 else
-    echo "❌ Aborting install due to unknown base image: $BASE_IMAGE_NAME"#!/bin/bash
-
-# Resolve script directory so relative paths work from anywhere
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$SCRIPT_DIR/scripts"
-
-# Prefer the invoking user when run via sudo; otherwise fall back to uid 1000
-DESKTOP_USER="${SUDO_USER:-$(id -nu 1000)}"
-DESKTOP_HOME="$(getent passwd "$DESKTOP_USER" | cut -d: -f6)"
-
-# Check if the OS is Bazzite
-if ! grep -q "Bazzite" /etc/*-release; then
-    echo "❌ This script is intended for Bazzite OS only. Exiting."
-    exit 1
-fi
-
-echo "✅ Bazzite OS detected."
-
-IMAGE_INFO="/usr/share/ublue-os/image-info.json"
-command -v jq >/dev/null 2>&1 || { echo "❌ jq is required."; exit 1; }
-BASE_IMAGE_NAME=$(jq -r '."base-image-name"' < "$IMAGE_INFO")
-
-# Check desktop via base image name
-if [[ "$BASE_IMAGE_NAME" == "silverblue" ]]; then
-    echo "⚠️  Warning: This script has not been tested on GNOME (Silverblue)."
-    read -r -p "Do you want to continue? [y/N]: " CONTINUE
-    CONTINUE=${CONTINUE:-N}
-    if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-        echo "❌ Aborting installation."
-        exit 1
-    fi
-elif [[ "$BASE_IMAGE_NAME" == "kinoite" ]]; then
-    echo "✅ KDE variant detected."
-else
     echo "❌ Aborting install due to unknown base image: $BASE_IMAGE_NAME"
     exit 1
 fi
@@ -74,6 +40,20 @@ if sudo cp "$SCRIPTS_DIR/enter-gamemode.sh" /usr/local/bin/enter-gamemode.sh; th
     }
 else
     echo "❌ Failed to copy enter-gamemode.sh to /usr/local/bin/"
+    exit 1
+fi
+
+# Copy the ensure-bazzite-desktop-login script and run it
+echo "📦 Copying the ensure-bazzite-desktop-login script and run it..."
+if sudo cp "$SCRIPTS_DIR/ensure-bazzite-desktop-login.sh" /usr/local/bin/ensure-bazzite-desktop-login.sh; then
+    sudo chmod +x /usr/local/bin/ensure-bazzite-desktop-login.sh || {
+        echo "❌ Failed to make ensure-bazzite-desktop-login.sh executable."
+        exit 1
+    }
+    # Run the script to ensure the config file is created
+    sudo /usr/local/bin/ensure-bazzite-desktop-login.sh
+else
+    echo "❌ Failed to copy ensure-bazzite-desktop-login.sh to /usr/local/bin/"
     exit 1
 fi
 
