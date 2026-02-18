@@ -2,6 +2,8 @@
 # Script to ensure /etc/sddm.conf.d/yy-bazzite-desktop-login.conf exists and disables autologin by default
 
 BAZZITE_DESKTOP_LOGIN_CONF='/etc/sddm.conf.d/yy-bazzite-desktop-login.conf'
+# SteamOS autologin SDDM config
+AUTOLOGIN_CONF='/etc/sddm.conf.d/zz-steamos-autologin.conf'
 
 if [[ ! -f "$BAZZITE_DESKTOP_LOGIN_CONF" ]]; then
   {
