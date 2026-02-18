@@ -25,7 +25,7 @@ DESKTOP_USER_LAUNCHER="$DESKTOP_HOME/.local/share/applications/enter-gamemode.de
 
 # Files created/used by enter-gamemode.sh
 # Note: do NOT remove zz-steamos-autologin.conf (managed/modified by Steam gamemode too)
-SDDM_DEFAULT_OVERRIDE_CONF="/etc/sddm.conf.d/yy-default-session-override.conf"
+SDDM_DEFAULT_OVERRIDE_CONF="/etc/sddm.conf.d/yy-bazzite-desktop-login.conf"
 
 echo "🛑 Disabling systemd service (if present)..."
 sudo systemctl disable --now enter-gamemode.service >/dev/null 2>&1 || true
