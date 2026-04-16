@@ -19,8 +19,7 @@ SYSTEMD_UNIT="/etc/systemd/system/enter-gamemode.service"
 SUDOERS_FILE="/etc/sudoers.d/enter-gamemode"
 WAYLAND_LINK="/usr/local/share/wayland-sessions/00-plasma.desktop"
 
-# Desktop launcher (system or user)
-DESKTOP_SYSTEM="/usr/share/applications/enter-gamemode.desktop"
+# Desktop launcher (user)
 DESKTOP_USER_LAUNCHER="$DESKTOP_HOME/.local/share/applications/enter-gamemode.desktop"
 
 # Files created/used by enter-gamemode.sh
@@ -55,16 +54,12 @@ if [[ -f "$SUDOERS_FILE" ]]; then
   sudo rm -f "$SUDOERS_FILE"
 fi
 
-if [[ -f "$DESKTOP_SYSTEM" ]]; then
-  sudo rm -f "$DESKTOP_SYSTEM"
-fi
-
 if [[ -f "$DESKTOP_USER_LAUNCHER" ]]; then
-  rm -f "$DESKTOP_USER_LAUNCHER"
+  rm -f "$DESKTOP_USER_LAUNCHER" || sudo rm -f "$DESKTOP_USER_LAUNCHER"
 fi
 
 if [[ -f "$ENTER_DESKTOP_LINK" || -L "$ENTER_DESKTOP_LINK" ]]; then
-  rm -f "$ENTER_DESKTOP_LINK"
+  rm -f "$ENTER_DESKTOP_LINK" || sudo rm -f "$ENTER_DESKTOP_LINK"
 fi
 
 # Unhide Return to Gaming Mode Desktop icon (restore backup if we hid it)
@@ -78,6 +73,11 @@ fi
 
 if [[ -f "$SYSTEMD_UNIT" ]]; then
   sudo rm -f "$SYSTEMD_UNIT"
+fi
+
+echo "🔄 Updating desktop database..."
+if [[ -d "$DESKTOP_HOME/.local/share/applications" ]]; then
+  update-desktop-database "$DESKTOP_HOME/.local/share/applications" >/dev/null 2>&1 || true
 fi
 
 echo "🔄 Reloading systemd..."
