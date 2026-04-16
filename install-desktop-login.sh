@@ -50,8 +50,8 @@ if sudo cp "$SCRIPTS_DIR/ensure-bazzite-desktop-login.sh" /usr/local/bin/ensure-
         echo "❌ Failed to make ensure-bazzite-desktop-login.sh executable."
         exit 1
     }
-    # Run the script to ensure the config file is created
-    sudo /usr/local/bin/ensure-bazzite-desktop-login.sh "$DESKTOP_USER" "$DESKTOP_HOME"
+    # Reset SDDM autologin to disabled so first reboot shows the login screen
+    sudo /usr/local/bin/ensure-bazzite-desktop-login.sh "$DESKTOP_USER" "$DESKTOP_HOME" "install"
 else
     echo "❌ Failed to copy ensure-bazzite-desktop-login.sh to /usr/local/bin/"
     exit 1

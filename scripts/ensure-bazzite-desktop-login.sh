@@ -8,6 +8,8 @@ AUTOLOGIN_CONF='/etc/sddm.conf.d/zz-steamos-autologin.conf'
 # Accept explicit desktop context from caller to avoid service environment differences.
 DESKTOP_USER="${1:-${USER:-$(id -nu 1000)}}"
 DESKTOP_HOME="${2:-$(getent passwd "$DESKTOP_USER" | cut -d: -f6)}"
+# Mode: 'install' resets autologin to disabled; 'enter-gamemode' enables gamescope autologin.
+MODE="${3:-enter-gamemode}"
 
 if [[ ! -f "$BAZZITE_DESKTOP_LOGIN_CONF" ]]; then
   {
@@ -16,13 +18,21 @@ if [[ ! -f "$BAZZITE_DESKTOP_LOGIN_CONF" ]]; then
   } | sudo tee "$BAZZITE_DESKTOP_LOGIN_CONF" > /dev/null
 fi
 
-# Configure autologin if Steam has been updated
-if [[ -f "$DESKTOP_HOME/.local/share/Steam/ubuntu12_32/steamui.so" ]]; then
+if [[ "$MODE" == "install" ]]; then
+  # Neutralize any prior Steam-written gamescope autologin so first reboot shows login screen.
   {
-    echo "[Users]"
-    echo "RememberLastSession=false" # Don't remember gamescope as the last session (this effectively clears Session, so we also need to reorder this list to make plasma.desktop first)
     echo "[Autologin]"
-    echo "User=$DESKTOP_USER" # Re-enable autologin
-    echo "Session=gamescope-session.desktop"
-  } > "$AUTOLOGIN_CONF"
+    echo "User="
+  } | sudo tee "$AUTOLOGIN_CONF" > /dev/null
+elif [[ "$MODE" == "enter-gamemode" ]]; then
+  # Configure autologin if Steam has been updated
+  if [[ -f "$DESKTOP_HOME/.local/share/Steam/ubuntu12_32/steamui.so" ]]; then
+    {
+      echo "[Users]"
+      echo "RememberLastSession=false" # Don't remember gamescope as the last session (this effectively clears Session, so we also need to reorder this list to make plasma.desktop first)
+      echo "[Autologin]"
+      echo "User=$DESKTOP_USER" # Re-enable autologin
+      echo "Session=gamescope-session.desktop"
+    } | sudo tee "$AUTOLOGIN_CONF" > /dev/null
+  fi
 fi
