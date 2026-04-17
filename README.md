@@ -9,11 +9,13 @@ A small utility for **Bazzite (Steam Deck, KDE/Plasma)** that keeps the system b
 When installed, this project:
 
 * Installs a **systemd oneshot service**: `enter-gamemode.service`
-* Installs a launcher: **Enter Gaming Mode** (Category: `System`)
+* Installs a launcher: **Enter Gaming Mode** (Category: `System`) to `~/.local/share/applications/`
+* Installs `/usr/local/bin/ensure-bazzite-desktop-login.sh`
 * Creates a desktop shortcut: `~/Desktop/Enter.desktop`
+* Resets SDDM autologin so the first reboot shows the Plasma login prompt
 * Temporarily enables SDDM autologin only when switching to Gaming Mode
 * Logs out of Plasma to allow Gamescope to start
-* Hides the default `Return.desktop` icon by renaming it to `.Return.desktop`
+* Hides the default `Return.desktop` icon by renaming it to `~/Desktop/.Return.desktop`
 * Adds a sudoers rule so the service can start without prompting for a password
 
 It does **not** permanently modify Steam’s own configuration.
@@ -50,15 +52,18 @@ chmod +x install-desktop-login.sh
 The installer:
 
 * Copies the service script to `/usr/local/bin`
+* Copies `ensure-bazzite-desktop-login.sh` to `/usr/local/bin`
 * Installs the systemd unit
-* Installs the application launcher
+* Installs the application launcher to `~/.local/share/applications/`
 * Creates the Desktop shortcut
 * Hides `Return.desktop`
+* Resets SDDM autologin so the first reboot shows the Plasma login prompt
 * Configures sudoers
 * Reloads systemd
 
 After installation:
 
+* Reboot to confirm the normal Plasma login prompt is shown first
 * Launch **Enter Gaming Mode** from the application launcher (Category: **System**)
 * Or click `Enter.desktop` on your Desktop
 
@@ -100,12 +105,14 @@ chmod +x uninstall-desktop-login.sh
 The uninstaller removes:
 
 * `/usr/local/bin/enter-gamemode.sh`
+* `/usr/local/bin/ensure-bazzite-desktop-login.sh`
 * `/etc/systemd/system/enter-gamemode.service`
 * `/etc/sudoers.d/enter-gamemode`
 * `/usr/local/share/wayland-sessions/00-plasma.desktop`
-* Installed application launcher (`enter-gamemode.desktop`)
+* Installed application launcher `~/.local/share/applications/enter-gamemode.desktop`
 * Desktop shortcut `~/Desktop/Enter.desktop`
-* Restores `~/Desktop/Return.desktop` from `.Return.desktop`
+* Restores `~/Desktop/Return.desktop` from `~/Desktop/.Return.desktop`
+* `/etc/sddm.conf.d/yy-bazzite-desktop-login.conf`
 * Reloads systemd
 
 It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file is also managed by Steam/SteamOS components.
@@ -116,6 +123,7 @@ It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file i
 
 ### System
 
+* `/usr/local/bin/ensure-bazzite-desktop-login.sh`
 * `/usr/local/bin/enter-gamemode.sh`
 * `/etc/systemd/system/enter-gamemode.service`
 * `/etc/sudoers.d/enter-gamemode`
@@ -123,18 +131,16 @@ It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file i
 
 ### Application Launcher
 
-* `/usr/share/applications/enter-gamemode.desktop`
-
-  * Falls back to `~/.local/share/applications/` if needed
+* `~/.local/share/applications/enter-gamemode.desktop`
 
 ### Desktop
 
 * `~/Desktop/Enter.desktop`
-* `~/Desktop/Return.desktop` → renamed to `~/.Return.desktop`
+* `~/Desktop/Return.desktop` → renamed to `~/Desktop/.Return.desktop`
 
 ### SDDM Configuration (used by the service)
 
-* `/etc/sddm.conf.d/yy-default-session-override.conf`
+* `/etc/sddm.conf.d/yy-bazzite-desktop-login.conf`
 * `/etc/sddm.conf.d/zz-steamos-autologin.conf` (updated when required)
 
 ---
