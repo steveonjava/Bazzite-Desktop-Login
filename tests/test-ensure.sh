@@ -16,7 +16,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 sed '/^detect_dm || exit 1/,$d' "$SRC" > "$TMP/lib.sh"
-# shellcheck disable=SC1090
+# shellcheck source=/dev/null
 source "$TMP/lib.sh"
 
 fail=0
@@ -58,13 +58,15 @@ if GAMEMODE_SESSION=definitely-not-here.desktop resolve_gamemode_session >/dev/n
     then echo "  FAIL  nonexistent GAMEMODE_SESSION was accepted"; fail=1
     else echo "  PASS  nonexistent GAMEMODE_SESSION rejected"; fi
 mkdir -p "$TMP/empty"
-if ( WAYLAND_SESSION_DIR="$TMP/empty"; resolve_gamemode_session >/dev/null 2>&1 )
+if ( export WAYLAND_SESSION_DIR="$TMP/empty"; resolve_gamemode_session >/dev/null 2>&1 )
     then echo "  FAIL  empty session dir was accepted"; fail=1
     else echo "  PASS  empty session dir rejected"; fi
 
 # Exercise the real writers with output redirected away from /etc.
 OUT="$TMP/generated.conf"
+# shellcheck disable=SC2329 # Called indirectly by the sourced arm/disarm functions.
 write_conf() { printf '%s' "$1" > "$OUT"; }
+# shellcheck disable=SC2034 # Read indirectly by the sourced arm function.
 DESKTOP_USER="testuser"
 DESKTOP_HOME="$TMP/home"
 mkdir -p "$DESKTOP_HOME/.local/share/Steam/ubuntu12_32"

@@ -24,6 +24,7 @@ When installed, this project:
 * Disarms autologin so the first reboot shows the Plasma login prompt
 * Temporarily arms a **one-shot** autologin only when switching to Gaming Mode
 * Logs out of Plasma to allow Gamescope to start
+* Stops the Gamescope portal broker on exit so Plasma activates a fresh KDE portal
 * Hides the default `Return.desktop` icon by renaming it to `~/Desktop/.Return.desktop`
 * Adds a sudoers rule so the service can start without prompting for a password
 
@@ -46,7 +47,7 @@ So `enter-gamemode.sh` does this instead:
 
 The restart makes it re-read config and honour the autologin exactly the way it does at boot. If the logout does not take within 30s, the autologin is disarmed again and the display manager is left alone — better to do nothing than to kill a session the user still has.
 
-## One-Shot Autologin
+## One-Shot Autologin and Portal Cleanup
 
 The autologin is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop. That is driven by a systemd user drop-in on the gamescope session *template*:
 
@@ -57,10 +58,13 @@ The autologin is **disarmed as soon as Gaming Mode actually starts**, not when y
 ```ini
 [Service]
 ExecStartPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
+ExecStopPost=-/usr/bin/systemctl --user stop xdg-desktop-portal.service
 ExecStopPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
 ```
 
-Two hooks on purpose: `ExecStartPost` is the normal path, `ExecStopPost` is the backstop. Disarming is idempotent, so running it twice is harmless. Because both hook the template (`@.service`) rather than one instance, they apply to every client — `@ogui-steam`, `@steam`, and any future variant.
+Autologin is cleared at both ends of the session: `ExecStartPost` is the normal path and the final `ExecStopPost` is the backstop. Disarming is idempotent, so running it twice is harmless. Because the drop-in hooks the template (`@.service`) rather than one instance, it applies to every client — `@ogui-steam`, `@steam`, and any future variant.
+
+The first `ExecStopPost` handles a separate session-lifecycle issue. Gamescope and Plasma can reuse the same user systemd manager, leaving `xdg-desktop-portal` alive with no KDE backend when Gaming Mode exits. Stopping only the generic broker during teardown lets the next Plasma session activate it again with the correct KDE environment. The command is best-effort so shutdown or an already-closing user bus does not mark the Gamescope unit failed.
 
 The practical effect: if you reboot, crash, or power off from Gaming Mode, the next boot still shows the login prompt. Autologin cannot get stuck on, which is the entire point of the project.
 
@@ -105,6 +109,8 @@ cd Bazzite-Desktop-Login
 chmod +x install-desktop-login.sh
 ./install-desktop-login.sh
 ```
+
+Run the installer again after updating an existing checkout. It replaces the managed scripts and drop-in in place, then reloads the running user systemd manager.
 
 After installation:
 
@@ -205,15 +211,34 @@ sudo systemctl restart plasmalogin
 
 **The greeter defaults to Big Picture instead of Plasma.** Add `RememberLastSession=false` under a `[Users]` section in the disarmed drop-in. It is set only while autologin is armed by default, so the greeter otherwise remembers the last session you used.
 
+**Deskflow or other Flatpaks fail after returning from Gaming Mode.** Check whether the desktop portal exported its KDE interfaces:
+
+```bash
+gdbus introspect --session \
+  --dest org.freedesktop.portal.Desktop \
+  --object-path /org/freedesktop/portal/desktop | \
+  grep -E 'InputCapture|FileChooser|Settings'
+```
+
+If those interfaces are missing, recover the current session with:
+
+```bash
+systemctl --user restart plasma-xdg-desktop-portal-kde.service
+systemctl --user restart xdg-desktop-portal.service
+```
+
+After reinstalling this project, the Gamescope teardown hook prevents the stale portal from carrying into the next Plasma session.
+
 ---
 
 ## Tests
 
 ```bash
 ./tests/test-ensure.sh
+./tests/test-units.sh
 ```
 
-Runs without root and never writes to `/etc` — it sources the helper with the dispatch stripped and redirects the config writer to a temp file. Covers display-manager detection, session resolution and its failure cases, and the arm/disarm interlock that keeps `Relogin=true` from surviving past game-mode startup.
+The tests run without root and never write to `/etc`. They cover display-manager detection, session resolution and its failure cases, the arm/disarm interlock, and the ordering and failure semantics of the Gamescope cleanup hooks.
 
 ---
 
