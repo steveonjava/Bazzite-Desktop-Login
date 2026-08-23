@@ -31,6 +31,18 @@ else
     exit 1
 fi
 
+# Detect the display manager. Key on the binary, not the config directory:
+# /etc/sddm.conf.d/ survives the plasmalogin migration as a stale leftover.
+if [[ -x /usr/bin/plasmalogin ]]; then
+    DM_NAME="plasmalogin"
+elif [[ -x /usr/bin/sddm ]]; then
+    DM_NAME="sddm"
+else
+    echo "❌ No supported display manager found (looked for plasmalogin and sddm). Aborting."
+    exit 1
+fi
+echo "✅ Display manager detected: $DM_NAME"
+
 # Move the enter gamemode script
 echo "📦 Copying enter gamemode script..."
 if sudo cp "$SCRIPTS_DIR/enter-gamemode.sh" /usr/local/bin/enter-gamemode.sh; then
@@ -43,17 +55,23 @@ else
     exit 1
 fi
 
-# Copy the ensure-bazzite-desktop-login script and run it
-echo "📦 Copying the ensure-bazzite-desktop-login script and run it..."
-if sudo cp "$SCRIPTS_DIR/ensure-bazzite-desktop-login.sh" /usr/local/bin/ensure-bazzite-desktop-login.sh; then
-    sudo chmod +x /usr/local/bin/ensure-bazzite-desktop-login.sh || {
-        echo "❌ Failed to make ensure-bazzite-desktop-login.sh executable."
+# Copy the helper scripts
+echo "📦 Copying helper scripts..."
+for helper in ensure-bazzite-desktop-login.sh bazzite-clear-autologin.sh; do
+    if sudo cp "$SCRIPTS_DIR/$helper" "/usr/local/bin/$helper"; then
+        sudo chmod +x "/usr/local/bin/$helper" || {
+            echo "❌ Failed to make $helper executable."
+            exit 1
+        }
+    else
+        echo "❌ Failed to copy $helper to /usr/local/bin/"
         exit 1
-    }
-    # Reset SDDM autologin to disabled so first reboot shows the login screen
-    sudo /usr/local/bin/ensure-bazzite-desktop-login.sh "$DESKTOP_USER" "$DESKTOP_HOME" "install"
-else
-    echo "❌ Failed to copy ensure-bazzite-desktop-login.sh to /usr/local/bin/"
+    fi
+done
+
+# Disarm autologin so the first reboot shows the login screen
+if ! sudo /usr/local/bin/ensure-bazzite-desktop-login.sh "$DESKTOP_USER" "$DESKTOP_HOME" "install"; then
+    echo "❌ Failed to initialise autologin configuration."
     exit 1
 fi
 
@@ -61,15 +79,22 @@ WAYLAND_SESS_DIR="/usr/local/share/wayland-sessions"
 SRC_SESSION="/usr/share/wayland-sessions/plasma.desktop"
 DST_SESSION="$WAYLAND_SESS_DIR/00-plasma.desktop"
 
-echo "📦 Creating session override in $WAYLAND_SESS_DIR..."
-if sudo install -d -m 0755 "$WAYLAND_SESS_DIR"; then
-    if ! sudo ln -sf "$SRC_SESSION" "$DST_SESSION"; then
-        echo "❌ Failed to create session symlink: $DST_SESSION"
+# This symlink is an SDDM sort-order hack: it makes plasma.desktop sort first so an
+# empty Session= lands on Plasma. plasmalogin is a different implementation and does
+# not document scanning /usr/local/share/wayland-sessions, so only do it for SDDM.
+if [[ "$DM_NAME" == "sddm" ]]; then
+    echo "📦 Creating session override in $WAYLAND_SESS_DIR..."
+    if sudo install -d -m 0755 "$WAYLAND_SESS_DIR"; then
+        if ! sudo ln -sf "$SRC_SESSION" "$DST_SESSION"; then
+            echo "❌ Failed to create session symlink: $DST_SESSION"
+            exit 1
+        fi
+    else
+        echo "❌ Failed to create directory: $WAYLAND_SESS_DIR"
         exit 1
     fi
 else
-    echo "❌ Failed to create directory: $WAYLAND_SESS_DIR"
-    exit 1
+    echo "⏭️  Skipping $WAYLAND_SESS_DIR override (not needed on $DM_NAME)."
 fi
 
 # Move the systemd service file
@@ -78,6 +103,24 @@ if sudo cp "$SCRIPTS_DIR/enter-gamemode.service" /etc/systemd/system/enter-gamem
     sudo systemctl daemon-reload || echo "⚠️ Warning: daemon-reload failed."
 else
     echo "❌ Failed to copy enter-gamemode.service to /etc/systemd/system/"
+    exit 1
+fi
+
+# Drop-in that disarms the autologin the moment game mode actually starts, making it
+# one-shot. Applied to the TEMPLATE unit so it covers every client (@ogui-steam,
+# @steam, ...), not just the one currently in use.
+GAMESCOPE_DROPIN_DIR="/etc/systemd/user/gamescope-session-plus@.service.d"
+echo "🛠️  Installing one-shot autologin drop-in..."
+if sudo install -d -m 0755 "$GAMESCOPE_DROPIN_DIR"; then
+    if sudo install -m 0644 "$SCRIPTS_DIR/gamescope-clear-autologin.conf" \
+            "$GAMESCOPE_DROPIN_DIR/10-clear-autologin.conf"; then
+        sudo systemctl --global daemon-reload 2>/dev/null || true
+    else
+        echo "❌ Failed to install drop-in to $GAMESCOPE_DROPIN_DIR"
+        exit 1
+    fi
+else
+    echo "❌ Failed to create directory: $GAMESCOPE_DROPIN_DIR"
     exit 1
 fi
 
@@ -148,23 +191,30 @@ echo "🔐 Configuring sudoers for passwordless service execution..."
 
 SYSTEMCTL_PATH="$(command -v systemctl)"
 SUDOERS_FILE="/etc/sudoers.d/enter-gamemode"
-SUDO_RULE="$DESKTOP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_PATH start enter-gamemode.service"
+# Two commands: starting the transition service, and the no-argument clear helper
+# invoked from the gamescope session. The helper takes no arguments precisely so this
+# rule needs no wildcard.
+SUDO_RULE="$DESKTOP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_PATH start enter-gamemode.service, /usr/local/bin/bazzite-clear-autologin.sh"
 
-if ! sudo bash -c "echo '$SUDO_RULE' > '$SUDOERS_FILE'"; then
-    echo "❌ Failed to write sudoers file."
+# Validate in a temp file BEFORE installing: a malformed drop-in in /etc/sudoers.d can
+# break sudo for every command on the system.
+SUDOERS_TMP="$(mktemp)"
+printf '%s\n' "$SUDO_RULE" > "$SUDOERS_TMP"
+chmod 0440 "$SUDOERS_TMP"
+
+if ! sudo visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then
+    echo "❌ sudoers validation failed; not installing."
+    sudo visudo -cf "$SUDOERS_TMP" || true
+    rm -f "$SUDOERS_TMP"
     exit 1
 fi
 
-if ! sudo chmod 0440 "$SUDOERS_FILE"; then
-    echo "❌ Failed to set permissions on $SUDOERS_FILE"
+if ! sudo install -m 0440 -o root -g root "$SUDOERS_TMP" "$SUDOERS_FILE"; then
+    echo "❌ Failed to install sudoers file."
+    rm -f "$SUDOERS_TMP"
     exit 1
 fi
-
-if ! sudo visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-    echo "❌ sudoers validation failed. Removing invalid file."
-    sudo rm -f "$SUDOERS_FILE"
-    exit 1
-fi
+rm -f "$SUDOERS_TMP"
 
 echo "✅ Passwordless sudo configured for enter-gamemode.service"
 

@@ -15,7 +15,10 @@ echo "🧹 Uninstalling Bazzite Desktop Login..."
 # Paths installed by installer
 BIN_SCRIPT="/usr/local/bin/enter-gamemode.sh"
 ENSURE_SCRIPT="/usr/local/bin/ensure-bazzite-desktop-login.sh"
+CLEAR_SCRIPT="/usr/local/bin/bazzite-clear-autologin.sh"
 SYSTEMD_UNIT="/etc/systemd/system/enter-gamemode.service"
+GAMESCOPE_DROPIN="/etc/systemd/user/gamescope-session-plus@.service.d/10-clear-autologin.conf"
+GAMESCOPE_DROPIN_DIR="/etc/systemd/user/gamescope-session-plus@.service.d"
 SUDOERS_FILE="/etc/sudoers.d/enter-gamemode"
 WAYLAND_LINK="/usr/local/share/wayland-sessions/00-plasma.desktop"
 
@@ -23,8 +26,13 @@ WAYLAND_LINK="/usr/local/share/wayland-sessions/00-plasma.desktop"
 DESKTOP_USER_LAUNCHER="$DESKTOP_HOME/.local/share/applications/enter-gamemode.desktop"
 
 # Files created/used by enter-gamemode.sh
-# Note: do NOT remove zz-steamos-autologin.conf (managed/modified by Steam gamemode too)
+# Note: do NOT remove zz-steamos-autologin.conf or zz-bazzite-autologin.conf - those are
+# managed by Steam / Bazzite, not by us. Only remove drop-ins that carry our own name.
 SDDM_DEFAULT_OVERRIDE_CONF="/etc/sddm.conf.d/yy-bazzite-desktop-login.conf"
+OUR_AUTOLOGIN_CONFS=(
+  "/etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf"
+  "/etc/sddm.conf.d/zz-bazzite-desktop-login-autologin.conf"
+)
 
 echo "🛑 Disabling systemd service (if present)..."
 sudo systemctl disable --now enter-gamemode.service >/dev/null 2>&1 || true
@@ -39,6 +47,25 @@ fi
 if [[ -f "$ENSURE_SCRIPT" ]]; then
   sudo rm -f "$ENSURE_SCRIPT"
 fi
+
+if [[ -f "$CLEAR_SCRIPT" ]]; then
+  sudo rm -f "$CLEAR_SCRIPT"
+fi
+
+# Remove our own autologin drop-ins from whichever display manager is in use, so no
+# stale autologin survives the uninstall.
+for conf in "${OUR_AUTOLOGIN_CONFS[@]}"; do
+  if [[ -f "$conf" ]]; then
+    echo "   removing $conf"
+    sudo rm -f "$conf"
+  fi
+done
+
+# Remove the one-shot clear drop-in from the gamescope session template
+if [[ -f "$GAMESCOPE_DROPIN" ]]; then
+  sudo rm -f "$GAMESCOPE_DROPIN"
+fi
+sudo rmdir "$GAMESCOPE_DROPIN_DIR" 2>/dev/null || true
 
 if [[ -L "$WAYLAND_LINK" || -f "$WAYLAND_LINK" ]]; then
   sudo rm -f "$WAYLAND_LINK"

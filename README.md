@@ -1,6 +1,15 @@
-# Bazzite Desktop Login (Steam Deck)
+# Bazzite Desktop Login
 
-A small utility for **Bazzite (Steam Deck, KDE/Plasma)** that keeps the system booting to the normal **desktop login (password prompt)** while still providing a simple way to switch into **Gaming Mode (Gamescope)** from the desktop.
+A small utility for **Bazzite (KDE/Plasma)** that keeps the system booting to the normal **desktop login (password prompt)** while still providing a simple way to switch into **Gaming Mode (Gamescope)** from the desktop.
+
+Works with both display managers Bazzite has shipped:
+
+| Display manager | Bazzite images | Config directory |
+| --- | --- | --- |
+| `plasmalogin` (Plasma Login Manager 6.7+) | `44.20260820` and later | `/etc/plasmalogin.conf.d/` |
+| `sddm` | earlier images | `/etc/sddm.conf.d/` |
+
+The display manager is detected at runtime by probing for the **binary** (`/usr/bin/plasmalogin`, then `/usr/bin/sddm`). It deliberately does *not* test for the config directory: `/etc/sddm.conf.d/` survives the migration to plasmalogin as a stale leftover, so testing for it would write the autologin config somewhere nothing reads.
 
 ---
 
@@ -10,21 +19,62 @@ When installed, this project:
 
 * Installs a **systemd oneshot service**: `enter-gamemode.service`
 * Installs a launcher: **Enter Gaming Mode** (Category: `System`) to `~/.local/share/applications/`
-* Installs `/usr/local/bin/ensure-bazzite-desktop-login.sh`
+* Installs `/usr/local/bin/ensure-bazzite-desktop-login.sh` and `/usr/local/bin/bazzite-clear-autologin.sh`
 * Creates a desktop shortcut: `~/Desktop/Enter.desktop`
-* Resets SDDM autologin so the first reboot shows the Plasma login prompt
-* Temporarily enables SDDM autologin only when switching to Gaming Mode
+* Disarms autologin so the first reboot shows the Plasma login prompt
+* Temporarily arms a **one-shot** autologin only when switching to Gaming Mode
 * Logs out of Plasma to allow Gamescope to start
 * Hides the default `Return.desktop` icon by renaming it to `~/Desktop/.Return.desktop`
 * Adds a sudoers rule so the service can start without prompting for a password
 
-It does **not** permanently modify Steam’s own configuration.
+It does **not** permanently modify Steam’s own configuration, and it never touches `zz-steamos-autologin.conf` or `zz-bazzite-autologin.conf` — those belong to Steam and Bazzite. This project owns exactly one drop-in, named `zz-bazzite-desktop-login-autologin.conf`.
+
+---
+
+## One-Shot Autologin
+
+The autologin this project writes is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop.
+
+That is done with a systemd user drop-in on the gamescope session *template*:
+
+```
+/etc/systemd/user/gamescope-session-plus@.service.d/10-clear-autologin.conf
+```
+
+```ini
+[Service]
+ExecStartPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
+```
+
+Because it hooks the template (`@.service`) rather than one instance, it applies to every client — `@ogui-steam`, `@steam`, and any future variant.
+
+The practical effect: if you reboot, crash, or power off from Gaming Mode, the next boot still shows the login prompt. Autologin can never get stuck on, which is the entire point of the project.
+
+---
+
+## Which Gaming Session Is Used
+
+Session filenames have changed between Bazzite releases, so the project resolves them at runtime and uses the first that exists in `/usr/share/wayland-sessions/`:
+
+1. `gamescope-session-ogui-steam.desktop` — Steam Big Picture Plus (OpenGamepadUI)
+2. `gamescope-session-steam-plus.desktop`
+3. `gamescope-session-steam.desktop` — plain Steam Big Picture
+4. `gamescope-session.desktop` — pre-2026 Bazzite
+
+Override with the `GAMEMODE_SESSION` environment variable:
+
+```bash
+sudo GAMEMODE_SESSION=gamescope-session-steam.desktop \
+  /usr/local/bin/ensure-bazzite-desktop-login.sh "$USER" "$HOME" enter-gamemode
+```
+
+If nothing resolves, the script **fails loudly and refuses to log you out**. Writing a `Session=` that points at a missing file makes the display manager fall back to the greeter silently, which is indistinguishable from "Enter Gaming Mode did nothing" — the exact bug that motivated this rewrite.
 
 ---
 
 ## Supported Systems
 
-* **Bazzite (Steam Deck) KDE/Plasma**
+* **Bazzite** KDE/Plasma
 
   * Base image name must be `kinoite`
   * The installer verifies this automatically
@@ -35,37 +85,17 @@ The GNOME variant (`silverblue`) is not supported.
 
 ## Installation
 
-Clone the repository:
-
 ```bash
 git clone https://github.com/steveonjava/Bazzite-Desktop-Login.git
 cd Bazzite-Desktop-Login
-```
-
-Make the installer executable and run it:
-
-```bash
 chmod +x install-desktop-login.sh
 ./install-desktop-login.sh
 ```
 
-The installer:
-
-* Copies the service script to `/usr/local/bin`
-* Copies `ensure-bazzite-desktop-login.sh` to `/usr/local/bin`
-* Installs the systemd unit
-* Installs the application launcher to `~/.local/share/applications/`
-* Creates the Desktop shortcut
-* Hides `Return.desktop`
-* Resets SDDM autologin so the first reboot shows the Plasma login prompt
-* Configures sudoers
-* Reloads systemd
-
 After installation:
 
 * Reboot to confirm the normal Plasma login prompt is shown first
-* Launch **Enter Gaming Mode** from the application launcher (Category: **System**)
-* Or click `Enter.desktop` on your Desktop
+* Launch **Enter Gaming Mode** from the application launcher (Category: **System**), or click `Enter.desktop` on your Desktop
 
 ---
 
@@ -73,49 +103,29 @@ After installation:
 
 ### Enter Gaming Mode
 
-Use either:
+Use the desktop shortcut `Enter.desktop` or the **Enter Gaming Mode** launcher. This:
 
-* Desktop shortcut: `Enter.desktop`
-* Application launcher: **Enter Gaming Mode**
-
-This:
-
-1. Updates SDDM configuration as needed
-2. Enables temporary autologin for Gaming Mode
+1. Resolves the gamescope session file
+2. Arms a one-shot autologin in the detected display manager's config directory
 3. Logs out of Plasma
-4. Boots into Gamescope
+4. Boots into Gamescope — and disarms the autologin again as soon as it starts
 
 ### Return to Desktop
 
-Exit Gaming Mode normally.
-
-You will return to the standard Plasma login screen with password prompt.
+Exit Gaming Mode normally. You return to the standard Plasma login screen with a password prompt.
 
 ---
 
 ## Uninstall
-
-From the project directory:
 
 ```bash
 chmod +x uninstall-desktop-login.sh
 ./uninstall-desktop-login.sh
 ```
 
-The uninstaller removes:
+The uninstaller removes everything it installed, including the one-shot drop-in and our autologin drop-in from **both** config directories, so no stale autologin survives.
 
-* `/usr/local/bin/enter-gamemode.sh`
-* `/usr/local/bin/ensure-bazzite-desktop-login.sh`
-* `/etc/systemd/system/enter-gamemode.service`
-* `/etc/sudoers.d/enter-gamemode`
-* `/usr/local/share/wayland-sessions/00-plasma.desktop`
-* Installed application launcher `~/.local/share/applications/enter-gamemode.desktop`
-* Desktop shortcut `~/Desktop/Enter.desktop`
-* Restores `~/Desktop/Return.desktop` from `~/Desktop/.Return.desktop`
-* `/etc/sddm.conf.d/yy-bazzite-desktop-login.conf`
-* Reloads systemd
-
-It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file is also managed by Steam/SteamOS components.
+It intentionally does **not** remove `zz-steamos-autologin.conf` or `zz-bazzite-autologin.conf`, which are managed by Steam and Bazzite.
 
 ---
 
@@ -124,10 +134,17 @@ It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file i
 ### System
 
 * `/usr/local/bin/ensure-bazzite-desktop-login.sh`
+* `/usr/local/bin/bazzite-clear-autologin.sh`
 * `/usr/local/bin/enter-gamemode.sh`
 * `/etc/systemd/system/enter-gamemode.service`
+* `/etc/systemd/user/gamescope-session-plus@.service.d/10-clear-autologin.conf`
 * `/etc/sudoers.d/enter-gamemode`
-* `/usr/local/share/wayland-sessions/00-plasma.desktop`
+* `/usr/local/share/wayland-sessions/00-plasma.desktop` *(SDDM only — an SDDM sort-order hack, not installed on plasmalogin)*
+
+### Display Manager Configuration
+
+* `/etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf`, or
+* `/etc/sddm.conf.d/zz-bazzite-desktop-login-autologin.conf`
 
 ### Application Launcher
 
@@ -138,22 +155,26 @@ It intentionally does **not** remove `zz-steamos-autologin.conf`, as that file i
 * `~/Desktop/Enter.desktop`
 * `~/Desktop/Return.desktop` → renamed to `~/Desktop/.Return.desktop`
 
-### SDDM Configuration (used by the service)
-
-* `/etc/sddm.conf.d/yy-bazzite-desktop-login.conf`
-* `/etc/sddm.conf.d/zz-steamos-autologin.conf` (updated when required)
-
 ---
 
-## How It Works (High-Level)
+## Troubleshooting
 
-* Uses a systemd oneshot service to coordinate the transition
-* Temporarily configures SDDM autologin for Gamescope
-* Logs out the current Plasma session
-* Ensures Plasma remains the default login session
-* Uses a sudoers drop-in to avoid password prompts when launching
+**Enter Gaming Mode drops me at the login screen.** Check that the autologin drop-in was armed:
 
-No files in `/usr/share` are modified directly.
+```bash
+cat /etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf
+```
+
+If `User=` is empty, arming failed — run the ensure script by hand to see the error. If it names a `Session=` that does not exist in `/usr/share/wayland-sessions/`, the display manager will silently fall back to the greeter.
+
+**I am stuck in a login loop.** SSH in and remove the drop-in:
+
+```bash
+sudo rm /etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf
+sudo systemctl restart plasmalogin
+```
+
+**The greeter defaults to Big Picture instead of Plasma.** Add `RememberLastSession=false` under a `[Users]` section in the disarmed drop-in. It is set only while autologin is armed by default, so the greeter otherwise remembers the last session you used.
 
 ---
 
