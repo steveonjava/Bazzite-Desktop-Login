@@ -74,18 +74,20 @@ if [[ -n "$resolved" ]]; then
     echo
     echo "=== arm() ==="
     if arm >/dev/null 2>&1; then
-        contains "Relogin=true present"        "Relogin=true"              "$OUT"
-        contains "User set"                    "User=testuser"             "$OUT"
-        contains "Session set"                 "Session=$resolved"         "$OUT"
-        contains "RememberLastSession=false"   "RememberLastSession=false" "$OUT"
+        contains "User set"                  "User=testuser"             "$OUT"
+        contains "Session set"               "Session=$resolved"         "$OUT"
+        contains "RememberLastSession=false" "RememberLastSession=false" "$OUT"
+        # Relogin does not work on plasmalogin 6.7 (config is only read at daemon
+        # start) and would risk relogging into game mode on exit. enter-gamemode.sh
+        # restarts the display manager instead. Guard against it creeping back.
+        absent   "Relogin deliberately absent" "Relogin=true"            "$OUT"
     else
         echo "  FAIL  arm() returned non-zero"; fail=1
     fi
 
     echo
-    echo "=== disarm() - the interlock: Relogin must disappear with the arming ==="
+    echo "=== disarm() ==="
     if disarm >/dev/null 2>&1; then
-        absent   "Relogin removed" "Relogin=true"      "$OUT"
         absent   "Session removed" "Session=$resolved" "$OUT"
         contains "User emptied"    "User="             "$OUT"
     else

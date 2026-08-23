@@ -95,28 +95,22 @@ arm() {
         return 1
     fi
 
-    # Relogin=true is REQUIRED and is the whole reason this needs care.
-    #
-    # Both plasmalogin and SDDM default to Relogin=false, meaning autologin fires only
-    # when the display manager first starts (i.e. at boot) and never when a session
-    # exits. Without it, logging out of Plasma just lands on the greeter - which is
-    # exactly how this presented before.
-    #
-    # Relogin=true on its own would loop: leave game mode, get logged straight back in.
-    # What makes it safe is that this whole file is rewritten by the disarm path as soon
-    # as gamescope starts, which removes Relogin along with User/Session. So the interlock
-    # is: Relogin only ever exists while the one-shot autologin is armed.
+    # Note on Relogin: both plasmalogin and SDDM default to Relogin=false, and setting it
+    # true does NOT help here. Tested on plasmalogin 6.7: arming with Relogin=true still
+    # produced the greeter on logout, because the display manager reads its configuration
+    # only when the daemon starts. enter-gamemode.sh therefore restarts the display
+    # manager after the session ends, which makes autologin fire the same way it does at
+    # boot. Relogin is deliberately left out - it is unnecessary with that approach and
+    # would risk being logged straight back into game mode on exit.
     #
     # RememberLastSession=false keeps the greeter from treating game mode as the new
     # default once we come back. It reverts when the file is disarmed.
     write_conf "# Managed by Bazzite-Desktop-Login. TEMPORARY one-shot autologin into game mode.
 # Cleared automatically once gamescope starts - see bazzite-clear-autologin.sh.
-# Relogin=true is what allows autologin to fire on logout rather than only at boot;
-# it disappears when this file is disarmed, which is what stops it looping.
+# Applied by restarting the display manager: it only reads config at startup.
 [Users]
 RememberLastSession=false
 [Autologin]
-Relogin=true
 User=$DESKTOP_USER
 Session=$session
 " || { echo "❌ Failed to write $AUTOLOGIN_CONF" >&2; return 1; }

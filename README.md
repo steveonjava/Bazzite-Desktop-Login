@@ -31,20 +31,24 @@ It does **not** permanently modify Steam’s own configuration, and it never tou
 
 ---
 
-## One-Shot Autologin, and why `Relogin=true` matters
+## Why the display manager gets restarted
 
-Both plasmalogin and SDDM default to `Relogin=false`, which means **autologin fires only when the display manager first starts — at boot — and never when a session exits.** Logging out of Plasma therefore just lands on the greeter. So the armed config sets:
+**The display manager reads its configuration only when the daemon starts.** Arming an autologin while it is already running has no effect — it simply shows the greeter on logout.
 
-```ini
-[Autologin]
-Relogin=true
-```
+`Relogin=true` does *not* solve this, despite reading like it should. Its documented meaning is "automatically log back into sessions when they exit", and it was tried on plasmalogin 6.7: arming with `Relogin=true` set still produced the greeter, because the running daemon never re-read the file. It is deliberately **not** used here — it would also risk logging you straight back into Gaming Mode on exit.
 
-On its own that would loop: leave Gaming Mode and you get logged straight back into it.
+So `enter-gamemode.sh` does this instead:
 
-What makes it safe is that the autologin is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop. Disarming rewrites the whole drop-in, which removes `Relogin` along with `User` and `Session`. The interlock is: **`Relogin=true` only ever exists while the one-shot autologin is armed.**
+1. Arm the autologin drop-in
+2. Log out cleanly via `org.kde.Shutdown`
+3. Poll `loginctl` until the desktop session has actually ended (30s cap)
+4. `systemctl restart --no-block` the display manager
 
-Disarming is driven by a systemd user drop-in on the gamescope session *template*:
+The restart makes it re-read config and honour the autologin exactly the way it does at boot. If the logout does not take within 30s, the autologin is disarmed again and the display manager is left alone — better to do nothing than to kill a session the user still has.
+
+## One-Shot Autologin
+
+The autologin is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop. That is driven by a systemd user drop-in on the gamescope session *template*:
 
 ```
 /etc/systemd/user/gamescope-session-plus@.service.d/10-clear-autologin.conf
@@ -56,7 +60,7 @@ ExecStartPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
 ExecStopPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
 ```
 
-Two hooks on purpose: `ExecStartPost` is the normal path, `ExecStopPost` is the backstop that runs before the session ends if the first one somehow failed. Disarming is idempotent, so running it twice is harmless. Because both hook the template (`@.service`) rather than one instance, they apply to every client — `@ogui-steam`, `@steam`, and any future variant.
+Two hooks on purpose: `ExecStartPost` is the normal path, `ExecStopPost` is the backstop. Disarming is idempotent, so running it twice is harmless. Because both hook the template (`@.service`) rather than one instance, they apply to every client — `@ogui-steam`, `@steam`, and any future variant.
 
 The practical effect: if you reboot, crash, or power off from Gaming Mode, the next boot still shows the login prompt. Autologin cannot get stuck on, which is the entire point of the project.
 
@@ -177,9 +181,15 @@ cat /etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf
 
 If `User=` is empty, arming failed — run the ensure script by hand to see the error. If it names a `Session=` that does not exist in `/usr/share/wayland-sessions/`, the display manager will silently fall back to the greeter.
 
-**Enter Gaming Mode logs me out but returns to the greeter.** The armed drop-in is missing `Relogin=true`, or the display manager is not reading the directory the drop-in was written to. Confirm which directory applies with `ls /usr/bin/plasmalogin /usr/bin/sddm`, and check the armed file contains `Relogin=true` under `[Autologin]`.
+**Enter Gaming Mode logs me out but returns to the greeter.** The display manager was not restarted, so it never re-read the armed config. Check the service log:
 
-**I keep getting logged straight back into Gaming Mode.** The one-shot disarm is not running, so `Relogin=true` is stuck on. Check that the sudoers rule works:
+```bash
+journalctl -u enter-gamemode.service -b | tail -20
+```
+
+You should see `Autologin armed` followed by `Restarting <dm>.service`. If the restart line is missing, the logout did not complete within 30s and the autologin was disarmed on purpose. If the config directory is wrong for your display manager, confirm which applies with `ls /usr/bin/plasmalogin /usr/bin/sddm`.
+
+**I keep getting logged straight back into Gaming Mode.** The one-shot disarm is not running. Check that the sudoers rule works:
 
 ```bash
 sudo -n /usr/local/bin/bazzite-clear-autologin.sh   # must print "Autologin disarmed" and exit 0
