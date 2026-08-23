@@ -114,7 +114,9 @@ echo "🛠️  Installing one-shot autologin drop-in..."
 if sudo install -d -m 0755 "$GAMESCOPE_DROPIN_DIR"; then
     if sudo install -m 0644 "$SCRIPTS_DIR/gamescope-clear-autologin.conf" \
             "$GAMESCOPE_DROPIN_DIR/10-clear-autologin.conf"; then
-        sudo systemctl --global daemon-reload 2>/dev/null || true
+        # Refresh the *running* user manager too - a --global reload does not reach it,
+        # so without this the drop-in only takes effect after the next login.
+        systemctl --user daemon-reload 2>/dev/null || true
     else
         echo "❌ Failed to install drop-in to $GAMESCOPE_DROPIN_DIR"
         exit 1
