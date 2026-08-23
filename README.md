@@ -31,11 +31,20 @@ It does **not** permanently modify Steam’s own configuration, and it never tou
 
 ---
 
-## One-Shot Autologin
+## One-Shot Autologin, and why `Relogin=true` matters
 
-The autologin this project writes is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop.
+Both plasmalogin and SDDM default to `Relogin=false`, which means **autologin fires only when the display manager first starts — at boot — and never when a session exits.** Logging out of Plasma therefore just lands on the greeter. So the armed config sets:
 
-That is done with a systemd user drop-in on the gamescope session *template*:
+```ini
+[Autologin]
+Relogin=true
+```
+
+On its own that would loop: leave Gaming Mode and you get logged straight back into it.
+
+What makes it safe is that the autologin is **disarmed as soon as Gaming Mode actually starts**, not when you return to the desktop. Disarming rewrites the whole drop-in, which removes `Relogin` along with `User` and `Session`. The interlock is: **`Relogin=true` only ever exists while the one-shot autologin is armed.**
+
+Disarming is driven by a systemd user drop-in on the gamescope session *template*:
 
 ```
 /etc/systemd/user/gamescope-session-plus@.service.d/10-clear-autologin.conf
@@ -44,11 +53,12 @@ That is done with a systemd user drop-in on the gamescope session *template*:
 ```ini
 [Service]
 ExecStartPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
+ExecStopPost=/usr/bin/sudo -n /usr/local/bin/bazzite-clear-autologin.sh
 ```
 
-Because it hooks the template (`@.service`) rather than one instance, it applies to every client — `@ogui-steam`, `@steam`, and any future variant.
+Two hooks on purpose: `ExecStartPost` is the normal path, `ExecStopPost` is the backstop that runs before the session ends if the first one somehow failed. Disarming is idempotent, so running it twice is harmless. Because both hook the template (`@.service`) rather than one instance, they apply to every client — `@ogui-steam`, `@steam`, and any future variant.
 
-The practical effect: if you reboot, crash, or power off from Gaming Mode, the next boot still shows the login prompt. Autologin can never get stuck on, which is the entire point of the project.
+The practical effect: if you reboot, crash, or power off from Gaming Mode, the next boot still shows the login prompt. Autologin cannot get stuck on, which is the entire point of the project.
 
 ---
 
@@ -167,6 +177,15 @@ cat /etc/plasmalogin.conf.d/zz-bazzite-desktop-login-autologin.conf
 
 If `User=` is empty, arming failed — run the ensure script by hand to see the error. If it names a `Session=` that does not exist in `/usr/share/wayland-sessions/`, the display manager will silently fall back to the greeter.
 
+**Enter Gaming Mode logs me out but returns to the greeter.** The armed drop-in is missing `Relogin=true`, or the display manager is not reading the directory the drop-in was written to. Confirm which directory applies with `ls /usr/bin/plasmalogin /usr/bin/sddm`, and check the armed file contains `Relogin=true` under `[Autologin]`.
+
+**I keep getting logged straight back into Gaming Mode.** The one-shot disarm is not running, so `Relogin=true` is stuck on. Check that the sudoers rule works:
+
+```bash
+sudo -n /usr/local/bin/bazzite-clear-autologin.sh   # must print "Autologin disarmed" and exit 0
+systemctl --user cat gamescope-session-plus@ogui-steam.service | grep clear-autologin
+```
+
 **I am stuck in a login loop.** SSH in and remove the drop-in:
 
 ```bash
@@ -175,6 +194,16 @@ sudo systemctl restart plasmalogin
 ```
 
 **The greeter defaults to Big Picture instead of Plasma.** Add `RememberLastSession=false` under a `[Users]` section in the disarmed drop-in. It is set only while autologin is armed by default, so the greeter otherwise remembers the last session you used.
+
+---
+
+## Tests
+
+```bash
+./tests/test-ensure.sh
+```
+
+Runs without root and never writes to `/etc` — it sources the helper with the dispatch stripped and redirects the config writer to a temp file. Covers display-manager detection, session resolution and its failure cases, and the arm/disarm interlock that keeps `Relogin=true` from surviving past game-mode startup.
 
 ---
 
