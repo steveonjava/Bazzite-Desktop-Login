@@ -42,6 +42,19 @@
         "#E8F0F8",
         "#2E4A66"
       ]
+    },
+    {
+      "id": "kit",
+      "name": "Kit",
+      "role": "agent",
+      "agent": "Claude Code",
+      "species": "fox",
+      "description": "a small orange fox with a cream chest, big curious eyes and a fluffy tail, wears a tiny terracotta scarf",
+      "palette": [
+        "#E8833A",
+        "#FFF1E0",
+        "#B4532A"
+      ]
     }
   ]
 }
