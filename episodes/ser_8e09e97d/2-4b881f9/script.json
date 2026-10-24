@@ -1,0 +1,100 @@
+{
+  "v": 2,
+  "title": "Three Silent Suspects",
+  "headline": "THREE SILENT SUSPECTS",
+  "synopsis": "A distro update swaps the login manager and Enter Gaming Mode fails silently, three ways. Sam and Glitch crack the case.",
+  "altText": "Noir four-panel strip. Detective Sam clicks a button and nothing happens. A beetle named Glitch lists three suspects: wrong folder, dead session, deaf daemon. Sam restarts the display manager and gaming mode launches.",
+  "format": "4koma",
+  "layout": "four panels in a 2x2 grid, noir rain, one teal accent for the gaming mode glow",
+  "style": "noir",
+  "palette": "bw-accent",
+  "accent": "teal",
+  "continuity": {
+    "mode": "standalone"
+  },
+  "panels": [
+    {
+      "scene": "Rainy night. Sam, a trench-coated detective, jabs a glowing 'Enter Gaming Mode' button on a monitor. Nothing happens.",
+      "characters": [
+        {
+          "cast": "sam",
+          "position": "center",
+          "expression": "worried"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "caption",
+          "text": "Update day. Login manager swapped."
+        },
+        {
+          "speaker": "sam",
+          "text": "I clicked. Silence."
+        }
+      ]
+    },
+    {
+      "scene": "Sam and Glitch the beetle at a corkboard with three suspect photos: a folder, a ghost, an ear",
+      "characters": [
+        {
+          "cast": "sam",
+          "position": "left",
+          "expression": "thinking"
+        },
+        {
+          "cast": "glitch",
+          "position": "right",
+          "expression": "proud"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "glitch",
+          "text": "Wrong folder. Dead session. Deaf daemon."
+        }
+      ]
+    },
+    {
+      "scene": "Sam stands over a sheepish line-up of three config files under a lamp",
+      "characters": [
+        {
+          "cast": "sam",
+          "position": "center",
+          "expression": "determined"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "sam",
+          "text": "Fail loudly. Then restart the daemon."
+        },
+        {
+          "speaker": "sfx",
+          "kind": "sfx",
+          "text": "CLICK"
+        }
+      ]
+    },
+    {
+      "scene": "Gaming mode blazes to life in teal light; Glitch waves a tiny flag, Sam grins",
+      "characters": [
+        {
+          "cast": "sam",
+          "position": "left",
+          "expression": "happy"
+        },
+        {
+          "cast": "glitch",
+          "position": "right",
+          "expression": "proud"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "caption",
+          "text": "Case closed. Until next update."
+        }
+      ]
+    }
+  ]
+}
